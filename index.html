@@ -493,9 +493,18 @@
 
   const fetchJSON = async (url, fallback) => {
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(res.statusText || "HTTP error");
-      return await res.json();
+      const headers = { "Accept": "application/json" };
+      if (url.includes("ngrok-free.dev")) {
+        headers["ngrok-skip-browser-warning"] = "true";
+      }
+      const res = await fetch(url, { headers, mode: "cors" });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0,160)}`);
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) {
+        throw new Error(`Non-JSON response (${ct}) :: ${text.slice(0,160)}`);
+      }
+      return JSON.parse(text);
     } catch (e) {
       console.error("fetchJSON failed:", url, e);
       return fallback;
