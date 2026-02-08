@@ -475,12 +475,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-(() => {
+  const API_BASE =
   location.hostname === "localhost"
     ? "http://localhost:8000"
     : "https://interrepellent-cognitively-jung.ngrok-free.dev";
-  if (typeof Chart !== "undefined" && typeof ChartDataLabels !== "undefined") Chart.register(ChartDataLabels);
-  const API_BASE = "https://interrepellent-cognitively-jung.ngrok-free.dev";
+
 
   const $ = (id) => document.getElementById(id);
   const safeLower = (v) => (v || "").toString().toLowerCase();
