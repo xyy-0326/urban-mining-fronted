@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- ✅ Mobile viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+  <title>Urban Mining Map - Kassel</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+  <style>
+    :root{
+      --sidebar-w: 280px;
+
+      /* Mobile sizes */
+      --mobile-topbar-h: 52px;
+      --mobile-sheet-collapsed-h: 120px; /* sidebar collapsed “bottom sheet” height */
+      --mobile-sheet-expanded-h: 62vh;    /* sidebar expanded height */
+      --mobile-gap: 10px;
+    }
+
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+    #app { display:flex; height:100vh; width:100%; font-family:system-ui,sans-serif; }
+
+    /* ---------------- Sidebar (Desktop default) ---------------- */
+    #sidebar{
+      width:var(--sidebar-w); box-sizing:border-box; padding:12px 14px;
+      border-right:1px solid #ddd; background:#fafafa;
+      display:flex; flex-direction:column; gap:10px;
+      font-size:13px;
+      overflow-y:auto; overflow-x:hidden;
+      height:100%;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+    }
+
+    .search-box{ display:flex; flex-direction:column; gap:6px; }
+    .search-row{ position:relative; display:block; }
+    #searchInput{
+      width:100%; box-sizing:border-box;
+      padding:8px 34px 8px 10px;
+      border-radius:6px; border:1px solid #ccc; font-size:13px;
+      background:#fff;
+    }
+    .search-icon-btn{
+      position:absolute; right:8px; top:50%; transform:translateY(-50%);
+      width:22px; height:22px; border:none; background:transparent;
+      cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center;
+      opacity:0.55;
+    }
+    .search-icon-btn:hover{ opacity:0.85; }
+    .search-icon-btn:active{ opacity:1; }
+
+    .filter-group{ font-size:13px; border-top:1px solid #e0e0e0; padding-top:8px; margin-top:4px; }
+    .filter-title{ font-weight:600; margin-bottom:4px; }
+    .filter-options{ display:flex; flex-direction:column; gap:2px; }
+    .filter-options label{ cursor:pointer; user-select:none; }
+    #resultCount{ margin-top:4px; font-size:12px; color:#555; }
+
+    .kg-highlight-btn{
+      width:100%; margin:4px 0 6px; padding:6px 8px;
+      font-size:12px; border-radius:6px; border:1px solid #ba0000;
+      background:#ffe5e5; color:#ba0000; cursor:pointer;
+    }
+    .kg-highlight-btn:hover{ background:#ffd6d6; }
+
+    .kg-section-title{ font-weight:600; margin-top:6px; margin-bottom:2px; }
+    .kg-list{
+      list-style:none; padding-left:0; margin:0;
+      border-radius:6px; background:#fff; border:1px solid #eee;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .kg-list li{
+      padding:6px 8px; cursor:pointer; font-size:12px; border-bottom:1px solid #f3f3f3;
+    }
+    .kg-list li:last-child{ border-bottom:none; }
+    .kg-list li:hover{ background:#f0f4ff; text-decoration:underline; }
+
+    .kg-sections{ display:flex; flex-direction:column; gap:10px; }
+    .kg-section{ display:flex; flex-direction:column; }
+    .kg-section.material-grow{ flex:1 1 auto; }
+    #kgDistrictList, #kgBuildingTypeList{ max-height:140px; }
+    #kgMaterialList{ max-height:360px; }
+
+    /* ---------------- Map ---------------- */
+    #map{ flex:1; height:100vh; min-width:0; }
+    .leaflet-container{ font-family:system-ui,sans-serif; }
+
+    .popup-table{ border-collapse:collapse; width:100%; font-size:12px; }
+    .popup-table th{ text-align:left; padding-right:6px; white-space:nowrap; vertical-align:top; }
+    .popup-table td{ vertical-align:top; }
+
+    .info-table{
+      font-size:11px; width:100%; border-collapse:collapse; margin-top:4px; table-layout:fixed;
+    }
+    .info-table th,.info-table td{
+      border:1px solid #eee; padding:2px 4px; word-wrap:break-word; overflow-wrap:anywhere; text-align:center;
+    }
+
+    .info-panel-subtitle{ font-size:11px; color:#555; margin:2px 0 4px; }
+
+    .info-overlay{
+      position:fixed; top:10px; right:10px; z-index:1000;
+      display:flex; flex-direction:column; gap:8px; max-width:560px;
+      height:calc(100vh - 20px); overflow-y:hidden;
+      pointer-events:none; /* allow clicks to pass except panels */
+    }
+
+    .info-panel{
+      pointer-events:auto;
+      background:#fff; border:1px solid #ddd; border-radius:4px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.15);
+      padding:6px 8px 8px; min-width:260px; max-width:100%;
+      max-height:auto; overflow-y:auto; overflow-x:hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .info-panel-header{
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:12px; font-weight:600;
+    }
+
+    .info-panel-close{
+      border:none; background:transparent; cursor:pointer;
+      font-size:14px; line-height:1; padding:0 2px;
+    }
+
+    .material-link, .component-link, .building-link{
+      cursor:pointer; text-decoration:underline; color:#0056b3; font-size:11px;
+    }
+
+    #materialInfoTableWrap.table-wrap{
+      max-height:260px; overflow-y:auto; overflow-x:hidden;
+      border:1px solid #eee; border-radius:4px; background:#fff;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Charts */
+    .bar-canvas-box{ height:180px; width:100%; overflow:hidden; }
+    #materialBarBuilding{ width:100% !important; height:100% !important; display:block; }
+
+    #material-chart-container{ display:none; margin-top:10px; width:100%; overflow:visible; }
+    .chart-row{ display:flex; gap:10px; }
+    .chart-title{ font-size:12px; font-weight:600; text-align:center; margin-bottom:4px; }
+    .chart-box{ width:50%; min-width:0; }
+    .chart-box canvas{
+      width:100% !important; height:auto !important; aspect-ratio:1/1;
+      display:block; margin:0 auto;
+    }
+
+    /* Deconstruction priority help */
+    .th-rel{ position:relative; }
+    .info-icon{
+      display:inline-flex; align-items:center; justify-content:center;
+      margin-left:6px; width:14px; height:14px;
+      font-size:11px; font-weight:700;
+      border-radius:50%; border:1px solid #999;
+      color:#555; cursor:pointer; user-select:none;
+    }
+    .tooltip{
+      display:none;
+      position:fixed;
+      right:0;
+      z-index:5000;
+      width:260px;
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:400;
+      text-align:left;
+      line-height:1.35;
+      background:#fff;
+      border:1px solid #ccc;
+      box-shadow:0 2px 8px rgba(0,0,0,0.15);
+      white-space:normal;
+      word-break:break-word;
+    }
+
+    /* ---------------- Mobile UI additions ---------------- */
+
+    /* Mobile top bar (hidden on desktop) */
+    #mobileTopbar{
+      display:none;
+      position:fixed;
+      top:0; left:0; right:0;
+      height:var(--mobile-topbar-h);
+      z-index:2000;
+      background:rgba(250,250,250,0.98);
+      backdrop-filter:saturate(180%) blur(8px);
+      border-bottom:1px solid #ddd;
+      padding:6px 10px;
+      box-sizing:border-box;
+      gap:8px;
+      align-items:center;
+    }
+    #mobileTopbar .btn{
+      border:1px solid #ccc;
+      background:#fff;
+      padding:8px 10px;
+      border-radius:10px;
+      font-size:13px;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      user-select:none;
+    }
+    #mobileTopbar .btn:active{ transform:translateY(1px); }
+    #mobileTopbar .spacer{ flex:1; }
+
+    /* Handle bar (only shown on mobile) */
+    .sheet-handle{
+      display:none;
+      width:44px;
+      height:5px;
+      border-radius:999px;
+      background:#cfcfcf;
+      margin:4px auto 8px;
+    }
+
+    /* Overlay becomes bottom stack on mobile */
+    .info-overlay.mobile-overlay{
+      top:auto; right:auto; left:0; right:0;
+      bottom:calc(var(--mobile-sheet-collapsed-h) + 10px);
+      max-width:none;
+      height:auto;
+      padding:0 10px;
+      box-sizing:border-box;
+      gap:10px;
+    }
+
+    /* Mobile chart layout */
+    .mobile .chart-row{ flex-direction:column; }
+    .mobile .chart-box{ width:100%; }
+    .mobile #materialInfoTableWrap.table-wrap{ max-height:220px; }
+
+    /* Reduce panel width on mobile */
+    .mobile .info-panel{ min-width:auto; border-radius:12px; }
+
+    /* Make Leaflet zoom controls easier to tap */
+    .mobile .leaflet-control-zoom a{
+      width:34px; height:34px; line-height:34px;
+    }
+
+    /* Responsive breakpoint */
+    @media (max-width: 920px){
+      :root{ --sidebar-w: 320px; } /* optional for tablets */
+    }
+
+    /* ===== Mobile breakpoint ===== */
+    @media (max-width: 768px){
+      body{ overflow:hidden; }
+      #mobileTopbar{ display:flex; }
+      #app{ display:block; height:100vh; }
+
+      /* Map occupies full screen behind */
+      #map{
+        position:fixed;
+        top:var(--mobile-topbar-h);
+        left:0; right:0;
+        bottom:0;
+        height:auto;
+        width:auto;
+      }
+
+      /* ✅ Only on mobile: sidebar becomes bottom sheet */
+      #sidebar.sidebar-sheet{
+        position:fixed;
+        left:0; right:0;
+        bottom:0;
+        z-index:1500;
+        width:100% !important;
+        border-right:none !important;
+        border-top:1px solid #ddd;
+        border-radius:14px 14px 0 0;
+        box-shadow:0 -6px 18px rgba(0,0,0,0.12);
+        padding:10px 12px 14px;
+        transform:translateY(0);
+        height:var(--mobile-sheet-collapsed-h);
+        overflow-y:auto;
+      }
+
+      #sidebar[data-sheet="expanded"]{
+        height:var(--mobile-sheet-expanded-h);
+      }
+
+      .sheet-handle{ display:block; }
+
+      /* Info overlay pinned above sheet */
+      #infoOverlay{
+        top:auto; left:0; right:0;
+        bottom:calc(var(--mobile-sheet-collapsed-h) + 10px);
+        max-width:none;
+        height:auto;
+      }
+      #sidebar[data-sheet="expanded"] ~ #infoOverlay{
+        bottom:calc(var(--mobile-sheet-expanded-h) + 10px);
+      }
+
+      /* Make sidebar lists smaller */
+      #kgDistrictList, #kgBuildingTypeList{ max-height:120px; }
+      #kgMaterialList{ max-height:220px; }
+
+      /* Touch: allow vertical scroll inside sidebar/panels */
+      #sidebar, .info-panel{ touch-action: pan-y; }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ✅ Mobile Topbar -->
+<div id="mobileTopbar" aria-label="Mobile top controls">
+  <button id="btnToggleSidebar" class="btn" type="button" aria-label="Toggle filters panel">
+    ☰ Filters
+  </button>
+  <button id="btnClosePanels" class="btn" type="button" aria-label="Close info panels">
+    ✕ Panels
+  </button>
+  <div class="spacer"></div>
+  <button id="btnResetView" class="btn" type="button" aria-label="Reset map view">
+    ⟳ Reset
+  </button>
+</div>
+
+<div id="app">
+  <!-- ✅ IMPORTANT: desktop should NOT have sidebar-sheet by default -->
+  <div id="sidebar" data-sheet="collapsed">
+    <div class="sheet-handle" aria-hidden="true"></div>
+
+    <div class="search-box">
+      <div class="search-row">
+        <input id="searchInput" type="text" placeholder="Search name, material, district…" />
+        <button id="searchIconBtn" class="search-icon-btn" type="button" title="Search" aria-label="Search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" stroke="#777" stroke-width="2"/>
+            <path d="M16.5 16.5 21 21" stroke="#777" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-title">Search in</div>
+        <div class="filter-options">
+          <label><input type="radio" name="searchScope" value="all" checked /> All</label>
+          <label><input type="radio" name="searchScope" value="material" /> Material</label>
+          <label><input type="radio" name="searchScope" value="buildingType" /> Building type</label>
+          <label><input type="radio" name="searchScope" value="district" /> District</label>
+        </div>
+      </div>
+
+      <div id="resultCount"></div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-title">Knowledge graph attributes</div>
+      <button id="highlightNeo4jBtn" class="kg-highlight-btn">Highlight all Neo4j buildings</button>
+
+      <div class="kg-sections">
+        <div class="kg-section">
+          <div class="kg-section-title">District</div>
+          <ul id="kgDistrictList" class="kg-list"></ul>
+        </div>
+
+        <div class="kg-section">
+          <div class="kg-section-title">Building type</div>
+          <ul id="kgBuildingTypeList" class="kg-list"></ul>
+        </div>
+
+        <div class="kg-section material-grow">
+          <div class="kg-section-title">Material</div>
+          <ul id="kgMaterialList" class="kg-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<div id="infoOverlay" class="info-overlay">
+  <!-- Material info (contains charts) -->
+  <div id="materialInfoPanel" class="info-panel" style="display:none;">
+    <div class="info-panel-header">
+      <span>Material info</span>
+      <button data-close="materialInfoPanel" class="info-panel-close" title="Close">×</button>
+    </div>
+
+    <div id="materialInfoLabel" class="info-panel-subtitle"></div>
+
+    <div id="materialInfoTableWrap" class="table-wrap">
+      <table id="materialInfoTable" class="info-table">
+        <thead>
+          <tr>
+            <th>Building</th>
+            <th>Component</th>
+            <th>Materials</th>
+            <th>District</th>
+          </tr>
+        </thead>
+        <tbody id="materialInfoBody">
+          <tr><td colspan="4"><i>Select a material to see details.</i></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="material-chart-container" style="display:none; position:relative; margin-top:10px;">
+      <button id="materialChartClose"
+              style="position:absolute; top:2px; right:0; border:none; background:none; cursor:pointer;">×</button>
+
+      <div class="bar-wrap" style="margin-bottom:10px;">
+        <div class="chart-title">Building material volumes (m³)</div>
+        <div class="bar-canvas-box">
+          <canvas id="materialBarBuilding"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-box">
+          <div class="chart-title">Building Material volume</div>
+          <canvas id="materialChartBuilding"></canvas>
+        </div>
+
+        <div class="chart-box">
+          <div class="chart-title">Total material volume</div>
+          <canvas id="materialChartGlobal"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Component info -->
+  <div id="componentInfoPanel" class="info-panel" style="display:none;">
+    <div class="info-panel-header">
+      <span>Component info</span>
+      <button data-close="componentInfoPanel" class="info-panel-close" title="Close">×</button>
+    </div>
+    <div id="componentInfoLabel" class="info-panel-subtitle"></div>
+
+    <table id="componentInfoTable" class="info-table">
+      <thead>
+        <tr>
+          <th>Component name</th>
+          <th>Number</th>
+          <th>Length (mm)</th>
+          <th>Width (mm)</th>
+          <th>Height (mm)</th>
+          <th>Category</th>
+          <th class="th-rel">
+            Deconstruction priority
+            <span id="deconInfoIcon" class="info-icon" role="button" aria-label="Deconstruction priority help">?</span>
+            <div id="deconTooltip" class="tooltip">
+              Deconstruction priority indicates the dismantling sequence based on component category.
+              <br><br>
+              1 – Fenestration and other non-structural elements (removed first).<br>
+              2 – Envelope components and secondary elements.<br>
+              3 – Structural elements (removed last).
+            </div>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="componentInfoBody">
+        <tr><td colspan="7"><i>Select a component to see details.</i></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+(() => {
+  location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://interrepellent-cognitively-jung.ngrok-free.dev";
+  if (typeof Chart !== "undefined" && typeof ChartDataLabels !== "undefined") Chart.register(ChartDataLabels);
+  const API_BASE = "https://interrepellent-cognitively-jung.ngrok-free.dev";
+
+  const $ = (id) => document.getElementById(id);
+  const safeLower = (v) => (v || "").toString().toLowerCase();
+  const norm = (v) => (v || "").toString().trim().toLowerCase();
+  const compact = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
+
+  const PALETTE_PURPLE = ["#4C2A85", "#6E3FA3", "#8C61B8", "#A783CC", "#C3A5DF", "#DDC8F0"];
+  const PALETTE_GRAY   = ["#e6e6e6", "#d9d9d9", "#cccccc", "#bfbfbf", "#b3b3b3", "#a6a6a6"];
+
+  const fetchJSON = async (url, fallback) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.statusText || "HTTP error");
+      return await res.json();
+    } catch (e) {
+      console.error("fetchJSON failed:", url, e);
+      return fallback;
+    }
+  };
+
+  const state = {
+    search: { q: "", scope: "all", lastMatched: [], lastGrouped: [] },
+    linkedSet: new Set(),
+    osmIdToLayer: new Map(),
+    buildingInfo: new Map(),
+    buildingIdToOsms: new Map(),
+    nameToOsm: new Map(),
+    kgIndex: { material: new Map(), buildingType: new Map(), district: new Map() },
+    globalMaterialVolume: [],
+    selectedLayer: null,
+    charts: { buildingPie: null, globalPie: null, buildingBar: null }
+  };
+
+  const dom = {
+    sidebar: $("sidebar"),
+    searchInput: $("searchInput"),
+    searchBtn: $("searchIconBtn"),
+    scopeRadios: document.querySelectorAll("input[name='searchScope']"),
+    resultCount: $("resultCount"),
+    highlightNeo4jBtn: $("highlightNeo4jBtn"),
+
+    materialInfoPanel: $("materialInfoPanel"),
+    componentInfoPanel: $("componentInfoPanel"),
+    materialInfoLabel: $("materialInfoLabel"),
+    componentInfoLabel: $("componentInfoLabel"),
+    materialInfoBody: $("materialInfoBody"),
+    componentInfoBody: $("componentInfoBody"),
+
+    materialChartContainer: $("material-chart-container"),
+    materialChartClose: $("materialChartClose"),
+
+    kgDistrictList: $("kgDistrictList"),
+    kgBuildingTypeList: $("kgBuildingTypeList"),
+    kgMaterialList: $("kgMaterialList"),
+
+    /* ✅ Mobile controls */
+    btnToggleSidebar: $("btnToggleSidebar"),
+    btnClosePanels: $("btnClosePanels"),
+    btnResetView: $("btnResetView"),
+    topbar: $("mobileTopbar"),
+    infoOverlay: $("infoOverlay")
+  };
+
+  /* ✅ Mobile mode flag + apply needed classes */
+  const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+
+  const applyResponsiveClasses = () => {
+    const m = isMobile();
+    document.body.classList.toggle("mobile", m);
+
+    // ✅ critical: only mobile uses bottom-sheet layout
+    dom.sidebar.classList.toggle("sidebar-sheet", m);
+
+    // optional: overlay helper class
+    dom.infoOverlay.classList.toggle("mobile-overlay", m);
+
+    // keep state sane when switching
+    if (!m) {
+      dom.sidebar.dataset.sheet = "collapsed";
+      dom.btnToggleSidebar.textContent = "☰ Filters";
+    }
+  };
+
+  applyResponsiveClasses();
+  window.addEventListener("resize", applyResponsiveClasses);
+
+  // --- Leaflet ---
+  const map = L.map("map", { zoomControl: true }).setView([51.315, 9.497], 14);
+  const HOME_VIEW = { center: [51.315, 9.497], zoom: 14 };
+
+  window.addEventListener("beforeprint", () => {
+    requestAnimationFrame(() => {
+      map.invalidateSize(true);
+      requestAnimationFrame(() => map.invalidateSize(true));
+    });
+  });
+
+  const fixMap = () => requestAnimationFrame(() => map.invalidateSize(true));
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20, attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  // Prevent sidebar scroll affecting map
+  L.DomEvent.disableClickPropagation(dom.sidebar);
+  L.DomEvent.disableScrollPropagation(dom.sidebar);
+  ["keydown","keyup","keypress"].forEach(evt => dom.searchInput.addEventListener(evt, e => e.stopPropagation()));
+
+  const styles = {
+    base(feature) {
+      const p = (feature && feature.properties) || {};
+      const bt = (p.building || "").toString().toLowerCase();
+      let fill = "#dddddd";
+      if (bt.includes("industrial")) fill = "#f4a261";
+      else if (bt.includes("residential")) fill = "#2a9d8f";
+      else if (bt.includes("office")) fill = "#457b9d";
+      return { stroke:true, color:"transparent", weight:1, fillColor:fill, fillOpacity:0.5 };
+    },
+    dim: { fillOpacity:0.05, color:"transparent" },
+    weak: { stroke:false, fillOpacity:0.35 },
+    linked(layer) {
+      layer.setStyle({ stroke:true, color:"#555555", weight:1, fillColor:"#BA0000", fillOpacity:0.8 });
+    }
+  };
+
+  const buildingLayer = L.geoJSON(null, {
+    style: styles.base,
+    onEachFeature(feature, layer) {
+      const p = feature.properties || {};
+      const osmId = p["@id"] || feature.id || "";
+      const nameOSM = p.name || "";
+      const buildingType = p.building || "";
+      const useOSM = p["building:use"] || p.use || "";
+      const materialOSM = p.material || p["building:material"] || "";
+      const districtOSM = p["addr:district"] || p["addr:suburb"] || "";
+
+      layer._osmId = osmId;
+      layer._osmInfo = { osmId, nameOSM, buildingType, useOSM, districtOSM };
+      layer._linkedToNeo4j = false;
+      layer._isHighlightedKG = false;
+      layer._componentInfo = [];
+
+      state.osmIdToLayer.set(osmId, layer);
+
+      const buildingTypeText = buildingType || useOSM;
+      layer._searchFields = {
+        name: safeLower(nameOSM),
+        all: safeLower([nameOSM, buildingType, useOSM, districtOSM].join(" ")),
+        buildingType: safeLower(buildingTypeText),
+        district: safeLower(districtOSM),
+        materialOSM: safeLower(materialOSM),
+        materialKG: ""
+      };
+
+      layer.bindPopup(popupHTML({ osmId, nameOSM, useOSM, buildingType, kg:null, planningTitle:"", planningUrl:"" }));
+      layer.on("click", (e) => { L.DomEvent.stopPropagation(e); openBuildingPopup(osmId); });
+    }
+  }).addTo(map);
+
+  map.on("click", () => { clearAllHighlights(); map.closePopup(); });
+
+  const boundsByOsmIds = (osmIds) => {
+    let bounds = null;
+    (osmIds || []).filter(Boolean).forEach(id => {
+      const layer = state.osmIdToLayer.get(id);
+      if (!layer?.getBounds) return;
+      try { bounds = bounds ? bounds.extend(layer.getBounds()) : layer.getBounds(); } catch (_) {}
+    });
+    return bounds;
+  };
+
+  function fitOsmIds(osmIds, opt = {}) {
+    const ids = (osmIds || []).filter(Boolean);
+    if (!ids.length) return;
+    const b = boundsByOsmIds(ids);
+    if (!b) return;
+
+    const pad = opt.extraPadding ?? (isMobile() ? 22 : 16);
+    const animate = opt.animate !== false;
+
+    try {
+      map.fitBounds(b, { padding: [pad, pad], animate });
+      if (opt.allowZoomIn === false) return;
+      if (opt.maxZoom != null) {
+        const z = map.getZoom();
+        if (z > opt.maxZoom) map.setZoom(opt.maxZoom);
+      }
+    } catch (_) {}
+  }
+
+  function fitOsmIdsSafe(osmIds, opt = {}) {
+    const ids = (osmIds || []).filter(Boolean);
+    if (!ids.length) return;
+    fitOsmIds(ids, opt);
+    if (opt.openIfSingle && ids.length === 1) {
+      requestAnimationFrame(() => openBuildingPopup(ids[0], { skipFit:true }));
+    }
+  }
+
+  function panToOsmIdsCenter(osmIds, opt = {}) {
+    const ids = (osmIds || []).filter(Boolean);
+    if (!ids.length) return;
+
+    const b = boundsByOsmIds(ids);
+    if (!b) return;
+
+    const center = b.getCenter();
+    const animate = opt.animate !== false;
+    const duration = opt.duration ?? 0.35;
+
+    try { map.panTo(center, { animate, duration }); } catch (_) {}
+  }
+
+  // --- Highlight / selection ---
+  const applyLinkedStyleIfNeeded = (layer) => layer?._linkedToNeo4j && styles.linked(layer);
+
+  function clearSelected() {
+    if (!state.selectedLayer) return;
+    buildingLayer.resetStyle(state.selectedLayer);
+    if (state.selectedLayer._isHighlightedKG) applyLinkedStyleIfNeeded(state.selectedLayer);
+    state.selectedLayer = null;
+  }
+
+  function selectLayer(layer) {
+    if (!layer) return;
+    if (state.selectedLayer && state.selectedLayer !== layer) {
+      buildingLayer.resetStyle(state.selectedLayer);
+      if (state.selectedLayer._isHighlightedKG) applyLinkedStyleIfNeeded(state.selectedLayer);
+    }
+    state.selectedLayer = layer;
+
+    layer.setStyle({ stroke:true, color:"#111", weight:2 });
+    applyLinkedStyleIfNeeded(layer);
+  }
+
+  function clearAllHighlights() {
+    clearSelected();
+    buildingLayer.eachLayer(l => { buildingLayer.resetStyle(l); l._isHighlightedKG = false; });
+    dom.resultCount.textContent = "";
+  }
+
+  function highlightOsmIds(osmIds, opt = {}) {
+    const ids = (osmIds || []).filter(Boolean);
+    if (!ids.length) return;
+
+    buildingLayer.eachLayer(layer => {
+      const hit = ids.includes(layer._osmId);
+      if (!hit) { layer.setStyle(styles.dim); layer._isHighlightedKG = false; return; }
+      buildingLayer.resetStyle(layer);
+      layer._isHighlightedKG = true;
+      layer._linkedToNeo4j ? styles.linked(layer) : layer.setStyle(styles.weak);
+    });
+
+    clearSelected();
+    if (opt.fit !== false) fitOsmIds(ids, { allowZoomIn:true, maxZoom:18, animate:true, extraPadding:16 });
+  }
+
+  function highlightAllNeo4jBuildings(opt = {}) {
+    const ids = [];
+    let matched = 0;
+
+    buildingLayer.eachLayer(layer => {
+      if (layer._linkedToNeo4j) {
+        buildingLayer.resetStyle(layer);
+        layer._isHighlightedKG = true;
+        styles.linked(layer);
+        matched++;
+        layer._osmId && ids.push(layer._osmId);
+      } else {
+        layer.setStyle(styles.dim);
+        layer._isHighlightedKG = false;
+      }
+    });
+
+    clearSelected();
+    dom.resultCount.textContent = `All Neo4j buildings – ${matched} buildings`;
+
+    if (opt.fit !== false) ids.length && fitOsmIds(ids, { animate:true, extraPadding:16 });
+  }
+
+  // --- Popup helpers ---
+  function renderPopupMaterialLinks(materialStr) {
+    if (!materialStr) return "-";
+    const raw = Array.isArray(materialStr) ? materialStr.join(", ") : String(materialStr);
+    const parts = raw.split(/[,;/]/).map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return "-";
+    return parts.map(m => `<a href="#" class="material-link popup-material-link" data-material="${m.replace(/"/g,"&quot;")}">${m}</a>`).join(", ");
+  }
+
+  function popupHTML({ osmId, nameOSM, useOSM, buildingType, kg, planningTitle, planningUrl }) {
+    const title = (kg && kg.name) || nameOSM || "(no name)";
+    const rows = [];
+
+    const bt = (kg && kg.buildingType) || buildingType || "";
+    const bc = (kg && kg.buildingClass != null) ? kg.buildingClass : "";
+
+    if (nameOSM) rows.push(`<tr><th>OSM name</th><td>${nameOSM}</td></tr>`);
+    if (bt) rows.push(`<tr><th>Building type</th><td>${bt}</td></tr>`);
+    if (bc !== "") rows.push(`<tr><th>Building class</th><td>${bc}</td></tr>`);
+
+    if (planningTitle) {
+      const planningCell = planningUrl
+        ? `<a href="${planningUrl}" target="_blank" rel="noopener">${planningTitle}</a>`
+        : planningTitle;
+      rows.push(`<tr><th>Planning</th><td>${planningCell}</td></tr>`);
+    }
+
+    if (useOSM) rows.push(`<tr><th>use (OSM)</th><td>${useOSM}</td></tr>`);
+
+    if (kg) {
+      if (kg.functionUse) rows.push(`<tr><th>Function</th><td>${kg.functionUse}</td></tr>`);
+      if (kg.year) rows.push(`<tr><th>Construction</th><td>${kg.year}</td></tr>`);
+      if (kg.constructionTime) rows.push(`<tr><th>Period</th><td>${kg.constructionTime}</td></tr>`);
+      if (kg.buildingArea) {
+        const sizeText = kg.areaUnit ? `${kg.buildingArea} ${kg.areaUnit}` : kg.buildingArea;
+        rows.push(`<tr><th>Size</th><td>${sizeText}</td></tr>`);
+      }
+      if (kg.structuralSystem) rows.push(`<tr><th>Structural system</th><td>${kg.structuralSystem}</td></tr>`);
+      if (kg.material) rows.push(`<tr><th>Material</th><td>${renderPopupMaterialLinks(kg.material)}</td></tr>`);
+
+      const heritageText = (kg.isHeritage) ? (kg.heritageStatus || "Heritage-listed") : "Not listed";
+      const heritageLaw = (kg.isHeritage && kg.heritageLaw)
+        ? `<div style="font-size:11px;color:#666;">${kg.heritageLaw}</div>` : "";
+      rows.push(`<tr><th>Heritage status</th><td>${heritageText}${heritageLaw}</td></tr>`);
+
+      if (kg.district) rows.push(`<tr><th>District</th><td>${kg.district}</td></tr>`);
+    }
+
+    const tableHTML = rows.length ? `<table class="popup-table">${rows.join("")}</table>` : "<i>No additional attributes.</i>";
+    const neoLabel = kg ? "<div style='margin-top:4px;font-size:11px;color:#555;'>Neo4j data linked</div>" : "";
+
+    return `
+      <div style="min-width:230px">
+        <div style="font-weight:bold;margin-bottom:2px;">${title}</div>
+        <div style="font-size:11px;color:#555;margin-bottom:4px;">OSM ID: ${osmId}</div>
+        ${tableHTML}
+        ${neoLabel}
+      </div>
+    `;
+  }
+
+  async function loadNeo4jDetails(osmId, layer) {
+    const info = await fetchJSON(`${API_BASE}/building?osm_id=${encodeURIComponent(osmId)}`, null);
+    if (!info) return;
+
+    let kg = null, planningTitle = "", planningUrl = "";
+
+    if (info.found) {
+      const pMain = info.properties || {};
+      const pPart = info.partProperties || {};
+      const p = { ...pPart, ...pMain };
+
+      let materialVal = info.materials;
+      if (Array.isArray(materialVal)) materialVal = uniq(materialVal).join(", ");
+      if (!materialVal) materialVal = p.material || "";
+
+      kg = {
+        name: p.name || "",
+        functionUse: p.function || p.use || p.functionUse || "",
+        year: p.year || p.year_of_construction || "",
+        material: materialVal,
+        constructionTime: p.constructionTime || "",
+        buildingArea: p.buildingArea || p.area || "",
+        areaUnit: p.area_unit || "",
+        buildingType: p.buildingType || p.parentBuildingType || "",
+        buildingClass: (p.buildingClass != null ? p.buildingClass : ""),
+        structuralSystem: p.structuralSystem || "",
+        district: info.district || p.district || "",
+        isHeritage: p.isHeritage === true,
+        heritageStatus: p.heritageStatus || "",
+        heritageLaw: p.heritageLaw || ""
+      };
+
+      const plan = info.planning || {};
+      planningTitle = plan.title || "";
+      planningUrl = plan.url || "";
+
+      layer._linkedToNeo4j = true;
+      selectLayer(layer);
+    }
+
+    const osmInfo = layer._osmInfo || {};
+    layer.setPopupContent(popupHTML({
+      osmId,
+      nameOSM: osmInfo.nameOSM,
+      useOSM: osmInfo.useOSM,
+      buildingType: osmInfo.buildingType,
+      kg,
+      planningTitle,
+      planningUrl
+    })).openPopup();
+
+    if (isMobile()) collapseSidebar();
+  }
+
+  function openBuildingPopup(osmId, opt = {}) {
+    const layer = state.osmIdToLayer.get(osmId);
+    if (!layer) return;
+
+    if (!opt.skipFit && layer.getBounds) {
+      fitOsmIds([osmId], { allowZoomIn:true, maxZoom:18, animate:true, extraPadding:16 });
+    }
+
+    layer._linkedToNeo4j ? selectLayer(layer) : (clearSelected(), state.selectedLayer = layer);
+
+    layer.openPopup();
+    loadNeo4jDetails(osmId, layer);
+  }
+
+  function openBuildingByBuildingId(buildingId, fallbackOsmId = "", opt = {}) {
+    const set = buildingId ? state.buildingIdToOsms.get(buildingId) : null;
+    const ids = set ? Array.from(set) : [];
+    const target = ids[0] || fallbackOsmId;
+
+    clearAllHighlights();
+    if (ids.length) {
+      highlightOsmIds(ids, { fit: false });
+      panToOsmIdsCenter(ids, { animate: true, duration: 0.35 });
+    } else if (target) {
+      panToOsmIdsCenter([target], { animate: true, duration: 0.35 });
+    }
+    if (target) openBuildingPopup(target, { skipFit: true });
+  }
+
+  map.on("popupopen", (e) => {
+    const el = e.popup && e.popup.getElement();
+    if (!el || el.dataset.bound === "1") return;
+    el.dataset.bound = "1";
+
+    el.addEventListener("click", (ev) => {
+      const link = ev.target.closest(".popup-material-link");
+      if (!link) return;
+      ev.preventDefault(); ev.stopPropagation();
+
+      const mat = link.dataset.material;
+      if (!mat) return;
+
+      renderMaterialInfo(mat);
+      showPanel(dom.materialInfoPanel, true);
+
+      const set = state.kgIndex.material.get(mat);
+      const ids = set ? Array.from(set) : [];
+      fitOsmIdsSafe(ids, { openIfSingle:true, maxZoom:18, animate:true, extraPadding:16 });
+
+      if (isMobile()) collapseSidebar();
+    });
+  });
+
+  // --- KG index building ---
+  function kgAdd(kind, value, osmId) {
+    if (!value) return;
+    const raw = value.toString();
+    const parts = (kind === "district") ? [raw] : raw.split(/[,;/]/);
+    parts.map(s => s.trim()).filter(Boolean).forEach(v => {
+      let set = state.kgIndex[kind].get(v);
+      if (!set) { set = new Set(); state.kgIndex[kind].set(v, set); }
+      set.add(osmId);
+    });
+  }
+
+  function addBuildingIdOsm(buildingId, osmId) {
+    if (!buildingId || !osmId) return;
+    let set = state.buildingIdToOsms.get(buildingId);
+    if (!set) { set = new Set(); state.buildingIdToOsms.set(buildingId, set); }
+    set.add(osmId);
+  }
+
+  async function preloadKGForLayer(osmId, layer) {
+    const info = await fetchJSON(`${API_BASE}/building?osm_id=${encodeURIComponent(osmId)}`, null);
+    if (!info || !info.found) return;
+
+    const pMain = info.properties || {};
+    const pPart = info.partProperties || {};
+    const p = { ...pPart, ...pMain };
+
+    const rawCompInfo = Array.isArray(info.componentInfo) ? info.componentInfo : [];
+    const compInfoArr = rawCompInfo.filter(ci => ci && Array.isArray(ci.materials) && ci.materials.length > 0);
+    layer._componentInfo = compInfoArr;
+
+    let materialsArr = Array.isArray(info.materials) ? info.materials : (info.materials ? [info.materials] : []);
+    if (!materialsArr.length && compInfoArr.length) {
+      const set = new Set();
+      compInfoArr.forEach(ci => (ci.materials || []).forEach(m => set.add(m)));
+      materialsArr = Array.from(set);
+    }
+    materialsArr = uniq(materialsArr);
+
+    const districtVal = info.district || p.district || "";
+    const buildingTypeVal = p.buildingType || p.parentBuildingType || p.function || p.use || p.functionUse || "";
+    const buildingIdVal = p.building_id || p.buildingId || "";
+
+    layer._linkedToNeo4j = true;
+
+    materialsArr.forEach(m => kgAdd("material", m, osmId));
+    kgAdd("buildingType", buildingTypeVal, osmId);
+    kgAdd("district", districtVal, osmId);
+
+    const osmInfo = layer._osmInfo || {};
+    const name = p.name || osmInfo.nameOSM || "(no name)";
+
+    state.buildingInfo.set(osmId, {
+      name,
+      buildingType: buildingTypeVal || osmInfo.buildingType || "",
+      structuralSystem: p.structuralSystem || "",
+      buildingClass: (p.buildingClass != null ? p.buildingClass : ""),
+      district: districtVal || osmInfo.districtOSM || "",
+      buildingId: buildingIdVal || ""
+    });
+
+    addBuildingIdOsm(buildingIdVal, osmId);
+    name && !state.nameToOsm.has(name) && state.nameToOsm.set(name, osmId);
+
+    const f = layer._searchFields || {};
+    f.name = (f.name + " " + safeLower(name)).trim();
+    f.materialKG = materialsArr.length ? safeLower(materialsArr.join(" ")) : (f.materialKG || "");
+    f.buildingType = (f.buildingType + " " + safeLower(buildingTypeVal)).trim();
+    f.district = (f.district + " " + safeLower(districtVal)).trim();
+    f.all = (f.all + " " + safeLower([name, buildingTypeVal, districtVal].join(" "))).trim();
+    layer._searchFields = f;
+  }
+
+  // --- Search / filters ---
+  function applyFilters(mode, kgOpt) {
+    const out = [];
+    let matched = 0;
+
+    const qRaw = (mode === "text") ? (state.search.q || "").trim() : "";
+    const q = qRaw.toLowerCase();
+    const qC = compact(qRaw);
+    const specialKG = (mode === "text" && q === "knowledge graph");
+    const hasQuery = !!qRaw || specialKG || (mode === "kg" && kgOpt);
+
+    if (mode === "text" && !hasQuery) {
+      buildingLayer.eachLayer(l => {
+        buildingLayer.resetStyle(l);
+        l._isHighlightedKG = false;
+      });
+      clearSelected();
+      dom.resultCount.textContent = "";
+      state.search.lastMatched = [];
+      return;
+    }
+
+    buildingLayer.eachLayer(layer => {
+      let isMatch = true;
+
+      if (mode === "text") {
+        if (!hasQuery) isMatch = true;
+        else if (specialKG) isMatch = !!layer._linkedToNeo4j;
+        else {
+          if (!layer._linkedToNeo4j) isMatch = false;
+          else {
+            const f = layer._searchFields || {};
+            const t =
+              (state.search.scope === "material") ? (f.materialKG || "") :
+              (state.search.scope === "buildingType") ? (f.buildingType || "") :
+              (state.search.scope === "district") ? (f.district || "") :
+              (f.all || "");
+            isMatch = compact(t).includes(qC);
+          }
+        }
+      } else if (mode === "kg" && kgOpt) {
+        const set = state.kgIndex[kgOpt.kind].get(kgOpt.value) || new Set();
+        isMatch = set.has(layer._osmId);
+      }
+
+      if (isMatch) {
+        buildingLayer.resetStyle(layer);
+        layer._isHighlightedKG = true;
+        layer._linkedToNeo4j ? styles.linked(layer) : layer.setStyle(styles.weak);
+        matched++;
+        layer._osmId && out.push(layer._osmId);
+      } else {
+        layer.setStyle(styles.dim);
+        layer._isHighlightedKG = false;
+      }
+    });
+
+    clearSelected();
+    state.search.lastMatched = out;
+    const grouped = groupMatchedByMainBuilding(out);
+    state.search.lastGrouped = grouped;
+
+    if (mode === "text") {
+      dom.resultCount.textContent = hasQuery ? `${grouped.length} buildings found` : "";
+    }
+    if (mode === "kg" && kgOpt) {
+      dom.resultCount.textContent = `${kgOpt.value} – ${grouped.length} buildings`;
+    }
+  }
+
+  function groupMatchedByMainBuilding(osmIds) {
+    const groups = new Map();
+    (osmIds || []).filter(Boolean).forEach(osmId => {
+      const info = state.buildingInfo.get(osmId) || {};
+      const buildingId = (info.buildingId || "").trim() || `__osm__:${osmId}`;
+
+      if (!groups.has(buildingId)) {
+        const layer = state.osmIdToLayer.get(osmId);
+        const osmName = layer?._osmInfo?.nameOSM || "";
+        const name = (info.name && info.name !== "(no name)") ? info.name : (osmName || buildingId);
+        groups.set(buildingId, { buildingId, name, osmIds: [] });
+      }
+      groups.get(buildingId).osmIds.push(osmId);
+    });
+
+    return Array.from(groups.values());
+  }
+
+  function findBestMaterialKey(qRaw) {
+    const q = (qRaw || "").trim();
+    if (!q) return null;
+
+    const qNorm = norm(q);
+    const qC = compact(q);
+    const keys = Array.from(state.kgIndex.material.keys());
+
+    let exact = keys.find(k => norm(k) === qNorm);
+    if (exact) return exact;
+
+    exact = keys.find(k => compact(k) === qC);
+    if (exact) return exact;
+
+    const hits = keys.filter(k => compact(k).includes(qC));
+    if (!hits.length) return null;
+
+    hits.sort((a,b) => a.length - b.length);
+    return hits[0];
+  }
+
+  function runSearch() {
+    state.search.q = dom.searchInput.value || "";
+    applyFilters("text");
+    panToOsmIdsCenter(state.search.lastMatched, { animate:true });
+    fixMap();
+
+    const q = (state.search.q || "").trim();
+    if (!q) return;
+
+    const grouped = groupMatchedByMainBuilding(state.search.lastMatched);
+    dom.resultCount.textContent = `${grouped.length} buildings found`;
+
+    if (state.search.scope === "material") {
+      const matKey = findBestMaterialKey(q);
+      if (matKey) {
+        renderMaterialInfo(matKey);
+        showPanel(dom.materialInfoPanel, true);
+        if (isMobile()) collapseSidebar();
+        return;
+      }
+    }
+
+    if (grouped.length === 1) {
+      requestAnimationFrame(() => openBuildingPopup(state.search.lastMatched[0], { skipFit:true }));
+      if (isMobile()) collapseSidebar();
+    }
+  }
+
+  // --- Panels ---
+  function showPanel(panel, show) {
+    if (!panel) return;
+    panel.style.display = show ? "block" : "none";
+    show && panel.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
+
+  function closeAllPanels() {
+    dom.materialInfoPanel.style.display = "none";
+    dom.componentInfoPanel.style.display = "none";
+    dom.materialChartContainer.style.display = "none";
+    destroyCharts();
+  }
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-close]");
+    if (!btn) return;
+
+    const id = btn.dataset.close;
+    const panel = $(id);
+    panel && (panel.style.display = "none");
+
+    if (id === "materialInfoPanel") {
+      dom.materialChartContainer.style.display = "none";
+      destroyCharts();
+    }
+  });
+
+  dom.materialChartClose?.addEventListener("click", () => { dom.materialChartContainer.style.display = "none"; });
+
+  // --- Charts ---
+  function destroyCharts() {
+    const c = state.charts;
+    c.buildingBar && (c.buildingBar.destroy(), c.buildingBar = null);
+    c.buildingPie && (c.buildingPie.destroy(), c.buildingPie = null);
+    c.globalPie   && (c.globalPie.destroy(),   c.globalPie   = null);
+  }
+
+  function ensureLegend(canvas, legendId, labels, colors) {
+    document.getElementById(legendId)?.remove();
+
+    const legend = document.createElement("div");
+    legend.id = legendId;
+    legend.style.display = "flex";
+    legend.style.flexWrap = "wrap";
+    legend.style.justifyContent = "center";
+    legend.style.gap = "12px";
+    legend.style.marginTop = "6px";
+    legend.style.fontSize = "12px";
+
+    labels.forEach((label, i) => {
+      const item = document.createElement("div");
+      item.style.display = "flex";
+      item.style.alignItems = "center";
+      item.style.gap = "4px";
+      item.innerHTML = `
+        <span style="width:12px;height:12px;display:inline-block;background:${colors[i]};border-radius:2px;"></span>
+        <span>${label}</span>
+      `;
+      legend.appendChild(item);
+    });
+
+    canvas.parentNode.appendChild(legend);
+  }
+
+  function colorsForPie(labels, selectedMaterial, mode) {
+    const idx = labels.findIndex(l => norm(l) === norm(selectedMaterial));
+    if (idx < 0) return labels.map((_, i) => PALETTE_PURPLE[i % PALETTE_PURPLE.length]);
+    if (mode === "highlightGray") return labels.map((_, i) => (i === idx ? PALETTE_PURPLE[0] : PALETTE_GRAY[i % PALETTE_GRAY.length]));
+    return labels.map((_, i) => (i === idx ? PALETTE_PURPLE[0] : PALETTE_PURPLE[(i % (PALETTE_PURPLE.length - 1)) + 1]));
+  }
+
+  function renderMaterialPie(canvasId, data, selectedMaterial, existingChart, mode = "purple") {
+    if (!data || !data.length) { existingChart && existingChart.destroy(); return null; }
+
+    const labels  = data.map(d => d.material || d.material_id || "unknown");
+    const volumes = data.map(d => Number(d.volume_m3) || 0);
+    const total   = volumes.reduce((a, b) => a + b, 0) || 1;
+
+    const canvas = $(canvasId);
+    if (!canvas) return existingChart;
+    const ctx = canvas.getContext("2d");
+    existingChart && existingChart.destroy();
+
+    const colors = colorsForPie(labels, selectedMaterial, mode);
+
+    const chart = new Chart(ctx, {
+      type: "pie",
+      data: { labels, datasets: [{ data: volumes, backgroundColor: colors, borderWidth: 1, radius: "80%" }] },
+      options: {
+        responsive: false,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            label: (context) => {
+              const vol = context.parsed || 0;
+              const pct = (vol / total * 100).toFixed(1);
+              return `${context.label}: ${vol.toFixed(3)} m³ (${pct}%)`;
+            }
+          }},
+          datalabels: {
+            formatter: (value, context) => {
+              const arr = context.chart.data.datasets[0].data;
+              const sum = arr.reduce((a, b) => a + b, 0) || 1;
+              const pct = value / sum * 100;
+              return pct >= 1 ? pct.toFixed(1) + "%" : "";
+            },
+            font: { size: 9 },
+            color: "#fff",
+            clamp: true
+          }
+        }
+      }
+    });
+
+    ensureLegend(canvas, canvasId + "-legend", labels, colors);
+    return chart;
+  }
+
+  function renderMaterialBar(canvasId, data, selectedMaterial, existingChart) {
+    if (!data || !data.length) { existingChart && existingChart.destroy(); return null; }
+
+    const rows = data
+      .map(d => ({ material: d.material || d.material_id || "unknown", volume: Number(d.volume_m3) || 0 }))
+      .sort((a, b) => b.volume - a.volume);
+
+    const labels = rows.map(r => r.material);
+    const rawVolumes = rows.map(r => r.volume);
+
+    const EPS = 1e-6;
+    const plotVolumes = rawVolumes.map(v => (v > 0 ? v : EPS));
+
+    const canvas = $(canvasId);
+    if (!canvas) return existingChart;
+
+    const w = canvas.parentElement?.clientWidth || 480;
+    canvas.width = w;
+    canvas.height = 180;
+
+    const ctx = canvas.getContext("2d");
+    existingChart && existingChart.destroy();
+
+    const selectedIndex = labels.findIndex(l => norm(l) === norm(selectedMaterial));
+    const bg = labels.map((_, i) => (selectedIndex >= 0 && i === selectedIndex) ? PALETTE_PURPLE[0] : PALETTE_GRAY[i % PALETTE_GRAY.length]);
+
+    const positive = plotVolumes.filter(v => v > 0);
+    const minV = positive.length ? Math.min(...positive) : EPS;
+    const maxV = positive.length ? Math.max(...positive) : 1;
+
+    return new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          data: plotVolumes,
+          backgroundColor: bg,
+          borderColor: labels.map((_, i) => (i === selectedIndex) ? "#111" : "transparent"),
+          borderWidth: labels.map((_, i) => (i === selectedIndex) ? 2 : 0)
+        }]
+      },
+      options: {
+        responsive: false,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 20, right: 10, left: 10, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `${(rawVolumes[c.dataIndex] ?? 0).toFixed(2)} m³` } },
+          datalabels: {
+            anchor: "end", align: "end", offset: 4,
+            clamp: false, clip: false,
+            color: "#111",
+            font: { size: 11, weight: "600" },
+            formatter: (_, ctx) => (rawVolumes[ctx.dataIndex] ?? 0).toFixed(2)
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 25, font: { size: 10 }, padding: 6 } },
+          y: {
+            type: "logarithmic",
+            min: Math.max(EPS, minV / 2),
+            max: maxV * 1.2,
+            title: { display: true, text: "m³ (log scale)" },
+            ticks: {
+              maxTicksLimit: 6,
+              callback: (v) => {
+                const n = Number(v);
+                if (!Number.isFinite(n)) return "";
+                if (n >= 1000) return n.toLocaleString();
+                if (n >= 1) return n.toFixed(0);
+                return n.toPrecision(1);
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  async function showMaterialCharts(selectedMaterial, buildingId) {
+    dom.materialChartContainer.style.display = "block";
+
+    let buildingData = [];
+    if (buildingId) {
+      buildingData = await fetchJSON(`${API_BASE}/material-volume-building?building_id=${encodeURIComponent(buildingId)}`, []);
+      if (!Array.isArray(buildingData)) buildingData = [];
+    }
+
+    state.charts.buildingBar = renderMaterialBar("materialBarBuilding", buildingData, selectedMaterial, state.charts.buildingBar);
+    state.charts.buildingPie = renderMaterialPie("materialChartBuilding", buildingData, selectedMaterial, state.charts.buildingPie, "highlightGray");
+    state.charts.globalPie   = renderMaterialPie("materialChartGlobal", state.globalMaterialVolume, selectedMaterial, state.charts.globalPie, "purple");
+  }
+
+  // --- Material info table ---
+  function renderMaterialInfo(materialValue) {
+    dom.materialInfoBody.innerHTML = "";
+    dom.materialInfoLabel.textContent = materialValue ? `Material: ${materialValue}` : "";
+
+    dom.materialChartContainer.style.display = "none";
+    destroyCharts();
+
+    const set = state.kgIndex.material.get(materialValue);
+    if (!set || !set.size) {
+      dom.materialInfoBody.innerHTML = `<tr><td colspan="4"><i>No buildings for this material.</i></td></tr>`;
+      return;
+    }
+
+    const groups = new Map();
+
+    set.forEach(osmId => {
+      const info = state.buildingInfo.get(osmId) || {};
+      const buildingName = info.name || "(no name)";
+      const buildingId = info.buildingId || "";
+      const district = info.district || "";
+
+      const layer = state.osmIdToLayer.get(osmId);
+      const compInfo = (layer && layer._componentInfo) || [];
+
+      compInfo.forEach(ci => {
+        const mats = Array.isArray(ci.materials) ? ci.materials : [];
+        if (!mats.includes(materialValue)) return;
+
+        const compName = ci.name || "(no name)";
+        const groupKey = `${buildingName}||${district}`;
+        let group = groups.get(groupKey);
+        if (!group) {
+          group = { osmId, building: buildingName, buildingId, district, comps: new Map() };
+          groups.set(groupKey, group);
+        }
+        group.comps.has(compName) || group.comps.set(compName, { component: compName, materials: uniq(mats) });
+      });
+    });
+
+    if (!groups.size) {
+      dom.materialInfoBody.innerHTML = `<tr><td colspan="4"><i>No components found for this material.</i></td></tr>`;
+      return;
+    }
+
+    groups.forEach(group => {
+      const compRows = Array.from(group.comps.values());
+      const span = compRows.length;
+
+      const bCell = group.osmId
+        ? `<a href="#" class="building-link" data-building-id="${group.buildingId}" data-osm-id="${group.osmId}">${group.building}</a>`
+        : group.building;
+
+      compRows.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        const compLink = `<a href="#" class="component-link" data-component="${row.component}">${row.component}</a>`;
+        const matsHtml = row.materials.map(m =>
+          `<a href="#" class="material-link" data-material="${m}" data-building-id="${group.buildingId}">${m}</a>`
+        ).join(", ");
+
+        tr.innerHTML = (idx === 0)
+          ? `<td rowspan="${span}">${bCell}</td><td>${compLink}</td><td>${matsHtml}</td><td rowspan="${span}">${group.district}</td>`
+          : `<td>${compLink}</td><td>${matsHtml}</td>`;
+        dom.materialInfoBody.appendChild(tr);
+      });
+    });
+  }
+
+  // --- Component info ---
+  const parsePriority = (categoryProps) => {
+    const props = Array.isArray(categoryProps) ? categoryProps : [];
+    const vals = props.map(p => p && p.deconstructionPriority).filter(v => v !== null && v !== undefined && String(v).trim() !== "");
+    if (!vals.length) return { minNum: null, strSet: new Set() };
+
+    const nums = [];
+    const strSet = new Set();
+    vals.forEach(v => {
+      const s = String(v).trim();
+      const n = Number(s);
+      Number.isFinite(n) ? nums.push(n) : strSet.add(s);
+    });
+    return { minNum: nums.length ? Math.min(...nums) : null, strSet };
+  };
+
+  const mergePriority = (entry, categoryProps) => {
+    const parsed = parsePriority(categoryProps);
+    if (parsed.minNum !== null) entry.priorityMin = (entry.priorityMin === null) ? parsed.minNum : Math.min(entry.priorityMin, parsed.minNum);
+    parsed.strSet.forEach(s => entry.priorityStr.add(s));
+  };
+
+  const priorityText = (entry) => entry.priorityMin !== null ? String(entry.priorityMin) : (entry.priorityStr.size ? Array.from(entry.priorityStr).join(", ") : "");
+
+  async function loadComponentInfo(componentName) {
+    dom.componentInfoBody.innerHTML = "";
+    dom.componentInfoLabel.textContent = componentName ? `Component: ${componentName}` : "";
+
+    if (!componentName) {
+      dom.componentInfoBody.innerHTML = `<tr><td colspan="7"><i>Select a component to see details.</i></td></tr>`;
+      return;
+    }
+
+    const url = `${API_BASE}/component-info?name=${encodeURIComponent(componentName)}&cat_fields=deconstructionPriority`;
+    const data = await fetchJSON(url, []);
+
+    if (!Array.isArray(data) || !data.length) {
+      dom.componentInfoBody.innerHTML = `<tr><td colspan="7"><i>No buildings for this component.</i></td></tr>`;
+      return;
+    }
+
+    const agg = new Map();
+    data.forEach(row => {
+      const buildingName = row.building || "(no name)";
+      const buildingId = row.building_id || "";
+      const num = row.number ?? 0;
+      const cats = Array.isArray(row.categories) ? row.categories : [];
+      const catProps = Array.isArray(row.categoryProps) ? row.categoryProps : [];
+
+      let entry = agg.get(buildingName);
+      if (!entry) {
+        const osms = buildingId ? state.buildingIdToOsms.get(buildingId) : null;
+        entry = {
+          buildingId,
+          osmId: (osms && osms.size) ? Array.from(osms)[0] : (state.nameToOsm.get(buildingName) || ""),
+          number: 0,
+          categories: new Set(),
+          priorityMin: null,
+          priorityStr: new Set(),
+          width: null,
+          height: null,
+          length: null
+        };
+        agg.set(buildingName, entry);
+      }
+
+      entry.number += num;
+      cats.forEach(c => c && entry.categories.add(c));
+      mergePriority(entry, catProps);
+
+      if (!entry.buildingId && buildingId) entry.buildingId = buildingId;
+      if (!entry.osmId) {
+        const osms = buildingId ? state.buildingIdToOsms.get(buildingId) : null;
+        entry.osmId = (osms && osms.size) ? Array.from(osms)[0] : (state.nameToOsm.get(buildingName) || "");
+      }
+
+      if (row.width_mm  != null && entry.width  == null) entry.width  = Number(row.width_mm);
+      if (row.length_mm != null && entry.length == null) entry.length = Number(row.length_mm);
+      if (row.height_mm != null && entry.height == null) entry.height = Number(row.height_mm);
+    });
+
+    const entries = Array.from(agg.values());
+
+    entries.forEach((entry, idx) => {
+      const tr = document.createElement("tr");
+      tr.dataset.buildingId = entry.buildingId || "";
+      tr.dataset.osmId = entry.osmId || "";
+
+      const catText = Array.from(entry.categories).join(", ");
+      const prio = priorityText(entry) || "-";
+
+      const l = entry.length != null ? entry.length : "-";
+      const w = entry.width  != null ? entry.width  : "-";
+      const h = entry.height != null ? entry.height : "-";
+
+      tr.innerHTML = (idx === 0)
+        ? `<td rowspan="${entries.length}">${componentName}</td>
+           <td>${entry.number}</td><td>${l}</td><td>${w}</td><td>${h}</td>
+           <td>${catText || "-"}</td><td>${prio}</td>`
+        : `<td>${entry.number}</td><td>${l}</td><td>${w}</td><td>${h}</td>
+           <td>${catText || "-"}</td><td>${prio}</td>`;
+
+      dom.componentInfoBody.appendChild(tr);
+    });
+  }
+
+  // --- Table clicks ---
+  $("componentInfoTable").addEventListener("click", (ev) => {
+    if (ev.target.closest("#deconInfoIcon")) return;
+    const row = ev.target.closest("tr");
+    const buildingId = row?.dataset?.buildingId || "";
+    const osmId = row?.dataset?.osmId || "";
+    (buildingId || osmId) && (ev.preventDefault(), openBuildingByBuildingId(buildingId, osmId, { fit:false }));
+    if (isMobile()) collapseSidebar();
+  });
+
+  $("materialInfoTable").addEventListener("click", (ev) => {
+    const b = ev.target.closest(".building-link");
+    if (b) {
+      ev.preventDefault();
+      openBuildingByBuildingId(b.dataset.buildingId || "", b.dataset.osmId || "", { fit:false });
+      if (isMobile()) collapseSidebar();
+      return;
+    }
+
+    const comp = ev.target.closest(".component-link");
+    if (comp) {
+      ev.preventDefault();
+      loadComponentInfo(comp.dataset.component);
+      showPanel(dom.componentInfoPanel, true);
+      if (isMobile()) collapseSidebar();
+      return;
+    }
+
+    const mat = ev.target.closest(".material-link");
+    if (mat) {
+      ev.preventDefault();
+      destroyCharts();
+      showMaterialCharts(mat.dataset.material, mat.dataset.buildingId || "");
+      showPanel(dom.materialInfoPanel, true);
+      if (isMobile()) collapseSidebar();
+      return;
+    }
+  });
+
+  // --- KG lists UI ---
+  function fillKGList(kind, ul, onClick) {
+    ul.innerHTML = "";
+    Array.from(state.kgIndex[kind].keys())
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+      .forEach(v => {
+        const li = document.createElement("li");
+        li.textContent = v;
+        li.addEventListener("click", () => onClick(v));
+        ul.appendChild(li);
+      });
+  }
+
+  function buildKGListsUI() {
+    fillKGList("district", dom.kgDistrictList, (v) => {
+      state.search.q = ""; dom.searchInput.value = "";
+      applyFilters("kg", { kind:"district", value:v });
+      panToOsmIdsCenter(state.search.lastMatched, { animate:true });
+      const g = state.search.lastGrouped || [];
+      if (g.length === 1) {
+        const one = g[0];
+        openBuildingByBuildingId(one.buildingId, one.osmIds?.[0] || "", { fit:false });
+      }
+      if (isMobile()) collapseSidebar();
+    });
+
+    fillKGList("buildingType", dom.kgBuildingTypeList, (v) => {
+      state.search.q = ""; dom.searchInput.value = "";
+      applyFilters("kg", { kind:"buildingType", value:v });
+      panToOsmIdsCenter(state.search.lastMatched, { animate:true });
+      const g = state.search.lastGrouped || [];
+      if (g.length === 1) {
+        const one = g[0];
+        openBuildingByBuildingId(one.buildingId, one.osmIds?.[0] || "", { fit:false });
+      }
+      if (isMobile()) collapseSidebar();
+    });
+
+    fillKGList("material", dom.kgMaterialList, (v) => {
+      state.search.q = ""; dom.searchInput.value = "";
+      applyFilters("kg", { kind:"material", value:v });
+      panToOsmIdsCenter(state.search.lastMatched, { animate:true });
+      const g = state.search.lastGrouped || [];
+      if (g.length === 1) {
+        const one = g[0];
+        openBuildingByBuildingId(one.buildingId, one.osmIds?.[0] || "", { fit:false });
+      }
+
+      renderMaterialInfo(v);
+      showPanel(dom.materialInfoPanel, true);
+
+      if (isMobile()) collapseSidebar();
+    });
+  }
+
+  // --- Decon tooltip ---
+  function initDeconHelp() {
+    const i = $("deconInfoIcon"), t = $("deconTooltip");
+    if (!i || !t || i.dataset.bound) return;
+    i.dataset.bound = "1";
+
+    const close = () => (t.style.display = "none");
+    const place = () => {
+      const r = i.getBoundingClientRect(), g = 8;
+      t.style.display = "block";
+      t.style.left = Math.max(12, Math.min(r.right - t.offsetWidth, innerWidth - t.offsetWidth - 12)) + "px";
+      t.style.top  = (r.bottom + t.offsetHeight + g < innerHeight)
+        ? (r.bottom + g) + "px"
+        : Math.max(12, r.top - t.offsetHeight - g) + "px";
+    };
+
+    i.onclick = e => (e.stopPropagation(), t.style.display === "block" ? close() : place());
+    t.onclick = e => e.stopPropagation();
+    document.addEventListener("click", (e) => !i.contains(e.target) && !t.contains(e.target) && close());
+    document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+    window.addEventListener("resize", () => t.style.display === "block" && place());
+  }
+
+  // --- Mobile: bottom sheet controls ---
+  function expandSidebar(){
+    if (!isMobile()) return;
+    dom.sidebar.dataset.sheet = "expanded";
+    dom.btnToggleSidebar.textContent = "▾ Filters";
+    requestAnimationFrame(() => fixMap());
+  }
+  function collapseSidebar(){
+    if (!isMobile()) return;
+    dom.sidebar.dataset.sheet = "collapsed";
+    dom.btnToggleSidebar.textContent = "☰ Filters";
+    requestAnimationFrame(() => fixMap());
+  }
+  function toggleSidebar(){
+    if (!isMobile()) return;
+    (dom.sidebar.dataset.sheet === "expanded") ? collapseSidebar() : expandSidebar();
+  }
+
+  dom.btnToggleSidebar?.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    toggleSidebar();
+  });
+
+  dom.btnClosePanels?.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    closeAllPanels();
+    map.closePopup();
+    if (isMobile()) collapseSidebar();
+  });
+
+  dom.btnResetView?.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    clearAllHighlights();
+    closeAllPanels();
+    map.closePopup();
+    map.setView(HOME_VIEW.center, HOME_VIEW.zoom, { animate:true });
+    if (isMobile()) collapseSidebar();
+  });
+
+  dom.sidebar.addEventListener("click", (e) => {
+    const handle = e.target.closest(".sheet-handle");
+    if (handle) { e.preventDefault(); toggleSidebar(); }
+  });
+
+  // --- UI events ---
+  dom.searchInput.addEventListener("input", (e) => { state.search.q = e.target.value || ""; });
+  dom.searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } });
+  dom.searchBtn.addEventListener("click", (e) => { e.preventDefault(); runSearch(); if (isMobile()) collapseSidebar(); });
+
+  dom.scopeRadios.forEach(r => r.addEventListener("change", (e) => {
+    if (!e.target.checked) return;
+    state.search.scope = e.target.value;
+  }));
+
+  dom.highlightNeo4jBtn.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    highlightAllNeo4jBuildings({ fit:false });
+    if (isMobile()) collapseSidebar();
+  });
+
+  // --- Data loading ---
+  async function loadLinkedOSMIds() {
+    const data = await fetchJSON(`${API_BASE}/linked_osm_ids`, { osm_ids: [] });
+    state.linkedSet = new Set(data.osm_ids || []);
+  }
+
+  async function loadBuildingsFromGeoJSON() {
+    const data = await fetchJSON("kassel_buildings.geojson", null);
+    if (!data) return;
+    buildingLayer.addData(data);
+    applyFilters("text");
+  }
+
+  async function loadGlobalMaterialVolumes() {
+    const data = await fetchJSON(`${API_BASE}/material-volume-all`, []);
+    state.globalMaterialVolume = Array.isArray(data) ? data : [];
+  }
+
+  async function preloadKGAttributes() {
+    const jobs = [];
+    buildingLayer.eachLayer(layer => {
+      const osmId = layer._osmId;
+      if (osmId && state.linkedSet.has(osmId)) jobs.push(preloadKGForLayer(osmId, layer));
+    });
+    await Promise.all(jobs);
+    buildKGListsUI();
+  }
+
+  // --- init ---
+  (async function init() {
+    initDeconHelp();
+    await loadLinkedOSMIds();
+    await loadBuildingsFromGeoJSON();
+    await preloadKGAttributes();
+    await loadGlobalMaterialVolumes();
+    fixMap();
+    if (isMobile()) collapseSidebar();
+  })();
+
+})();
+</script>
+</body>
+</html>
