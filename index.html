@@ -493,18 +493,22 @@
 
   const fetchJSON = async (url, fallback) => {
     try {
-      const headers = { "Accept": "application/json" };
+      let finalUrl = url;
       if (url.includes("ngrok-free.dev")) {
-        headers["ngrok-skip-browser-warning"] = "true";
+        const u = new URL(url);
+        u.searchParams.set("ngrok-skip-browser-warning", "true");
+        finalUrl = u.toString();
       }
-      const res = await fetch(url, { headers, mode: "cors" });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0,160)}`);
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      if (!ct.includes("application/json")) {
-        throw new Error(`Non-JSON response (${ct}) :: ${text.slice(0,160)}`);
+
+      const res = await fetch(finalUrl, {
+        mode: "cors",
+        cache: "no-store"
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text.slice(0,120)}`);
       }
-      return JSON.parse(text);
+      return await res.json();
     } catch (e) {
       console.error("fetchJSON failed:", url, e);
       return fallback;
@@ -1717,8 +1721,8 @@
   async function loadLinkedOSMIds() {
     const data = await fetchJSON(`${API_BASE}/linked_osm_ids`, { osm_ids: [] });
     state.linkedSet = new Set(data.osm_ids || []);
-    console.log("linked_osm_ids count =", state.linkedSet.size);
-    console.log("linked_osm_ids sample =", Array.from(state.linkedSet).slice(0,5));
+    console.log("linked_osm_ids =", data?.osm_ids?.length, data);
+    state.linkedSet = new Set(data.osm_ids || []);
   }
 
   async function loadBuildingsFromGeoJSON() {
