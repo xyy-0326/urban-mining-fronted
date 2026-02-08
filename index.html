@@ -479,7 +479,7 @@
   const API_BASE =
   location.hostname === "localhost"
     ? "http://localhost:8000"
-    : "https://interrepellent-cognitively-jung.ngrok-free.dev";
+    : "/api";
 
 
   const $ = (id) => document.getElementById(id);
@@ -1730,8 +1730,12 @@
   async function loadBuildingsFromGeoJSON() {
     const data = await fetchJSON("kassel_buildings.geojson", null);
     if (!data) return;
-    buildingLayer.addData(data);
-    applyFilters("text");
+    return new Promise(resolve => {
+      buildingLayer.addData(data);
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
   }
 
   async function loadGlobalMaterialVolumes() {
