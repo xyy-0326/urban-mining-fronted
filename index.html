@@ -1717,6 +1717,8 @@
   async function loadLinkedOSMIds() {
     const data = await fetchJSON(`${API_BASE}/linked_osm_ids`, { osm_ids: [] });
     state.linkedSet = new Set(data.osm_ids || []);
+    console.log("linked_osm_ids count =", state.linkedSet.size);
+    console.log("linked_osm_ids sample =", Array.from(state.linkedSet).slice(0,5));
   }
 
   async function loadBuildingsFromGeoJSON() {
