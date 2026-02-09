@@ -301,11 +301,13 @@
 
       /* Info overlay pinned above sheet */
       #infoOverlay{
-        top: auto;
-        left: 0; right: 0;
+        left:0; right:0;
+        top: autocalc(var(--mobile-topbar-h) + env(safe-area-inset-top) + 8px);
         bottom: calc(var(--mobile-sheet-collapsed-h) + 10px);
         max-width: none;
         height: auto;
+        overflow:hidden;
+        z-index:1400;
       }
       #sidebar.sidebar-sheet[data-sheet="expanded"] ~ #infoOverlay{
         bottom: calc(var(--mobile-sheet-expanded-h) + 10px);
