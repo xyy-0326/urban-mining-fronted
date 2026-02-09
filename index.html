@@ -337,9 +337,7 @@
 
       /* Info panel scroll constraints (avoid being covered / keep usable height) */
       #infoOverlay .info-panel{
-        max-height: calc(
-          100vh - var(--mobile-topbar-h) - var(--mobile-sheet-collapsed-h) - 24px
-        );
+        max-height: 100%;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
