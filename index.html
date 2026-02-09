@@ -1735,15 +1735,18 @@
   }
 
   async function loadBuildingsFromGeoJSON() {
-    const data = await fetchJSON("kassel_buildings.geojson", null);
-    if (!data) return;
+    const res = await fetch("kassel_buildings.geojson", { cache: "no-store" });
+    if (!res.ok) {
+      console.error("GeoJSON load failed:", res.status, await res.text());
+      return;
+    }
+    const data = await res.json();
     return new Promise(resolve => {
       buildingLayer.addData(data);
-      requestAnimationFrame(() => {
-        resolve();
-      });
+      requestAnimationFrame(resolve);
     });
   }
+
 
   async function loadGlobalMaterialVolumes() {
     const data = await fetchJSON(`/material-volume-all`, []);
