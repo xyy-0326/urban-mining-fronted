@@ -477,10 +477,9 @@
 <script>
 (() => {
   const API_BASE =
-  location.hostname === "localhost"
-    ? "http://localhost:8000"
-    : "/api";
-
+    (location.hostname === "127.0.0.1" || location.hostname === "localhost")
+      ? "http://localhost:8000"
+      : "https://urban-mining-backend.onrender.com";
 
   const $ = (id) => document.getElementById(id);
   const safeLower = (v) => (v || "").toString().toLowerCase();
@@ -493,22 +492,30 @@
 
   const fetchJSON = async (url, fallback) => {
     try {
+      const finalUrl = /^https?:\/\//i.test(url)
+        ? url
+        : `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
+      
       const headers = { Accept: "application/json" };
       if (url.includes("ngrok-free.dev")) {
         headers["ngrok-skip-browser-warning"] = "true";
       }
 
       const res = await fetch(finalUrl, {
+        headers,
         mode: "cors",
         cache: "no-store"
       });
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
       const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("application/json")) {
-        throw new Error(`Expected JSON but got: ${ct}\n${text.slice(0,120)}`);
+      const text = await res.text();
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      if (!ct.includes("application/json") && !ct.includes("application/geo+json")) {
+        try { return JSON.parse(text); } catch {
+          throw new Error(`Expected JSON but got: ${ct}`);
+        }
       }
       return JSON.parse(text);
     } catch (e) {
@@ -839,7 +846,7 @@
   }
 
   async function loadNeo4jDetails(osmId, layer) {
-    const info = await fetchJSON(`${API_BASE}/building?osm_id=${encodeURIComponent(osmId)}`, null);
+    const info = await fetchJSON(`/building?osm_id=${encodeURIComponent(osmId)}`, null);
     if (!info) return;
 
     let kg = null, planningTitle = "", planningUrl = "";
@@ -965,7 +972,7 @@
   }
 
   async function preloadKGForLayer(osmId, layer) {
-    const info = await fetchJSON(`${API_BASE}/building?osm_id=${encodeURIComponent(osmId)}`, null);
+    const info = await fetchJSON(`/building?osm_id=${encodeURIComponent(osmId)}`, null);
     if (!info || !info.found) return;
 
     const pMain = info.properties || {};
@@ -1359,7 +1366,7 @@
 
     let buildingData = [];
     if (buildingId) {
-      buildingData = await fetchJSON(`${API_BASE}/material-volume-building?building_id=${encodeURIComponent(buildingId)}`, []);
+      buildingData = await fetchJSON(`/material-volume-building?building_id=${encodeURIComponent(buildingId)}`, []);
       if (!Array.isArray(buildingData)) buildingData = [];
     }
 
@@ -1469,7 +1476,7 @@
       return;
     }
 
-    const url = `${API_BASE}/component-info?name=${encodeURIComponent(componentName)}&cat_fields=deconstructionPriority`;
+    const url = `/component-info?name=${encodeURIComponent(componentName)}&cat_fields=deconstructionPriority`;
     const data = await fetchJSON(url, []);
 
     if (!Array.isArray(data) || !data.length) {
@@ -1721,7 +1728,7 @@
 
   // --- Data loading ---
   async function loadLinkedOSMIds() {
-    const data = await fetchJSON(`${API_BASE}/linked_osm_ids`, { osm_ids: [] });
+    const data = await fetchJSON(`/linked_osm_ids`, { osm_ids: [] });
     state.linkedSet = new Set(data.osm_ids || []);
     console.log("linked_osm_ids =", data?.osm_ids?.length, data);
     state.linkedSet = new Set(data.osm_ids || []);
@@ -1739,7 +1746,7 @@
   }
 
   async function loadGlobalMaterialVolumes() {
-    const data = await fetchJSON(`${API_BASE}/material-volume-all`, []);
+    const data = await fetchJSON(`/material-volume-all`, []);
     state.globalMaterialVolume = Array.isArray(data) ? data : [];
   }
 
