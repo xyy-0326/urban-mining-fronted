@@ -309,6 +309,27 @@
 
       /* Touch: allow vertical scroll inside sidebar/panels */
       #sidebar, .info-panel{ touch-action: pan-y; }
+
+      #chartsWrap{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+        align-items:stretch;
+      }
+
+      .chartCard{
+        width:100%;
+        min-width:0;
+      }
+
+      .chartCard canvas{
+        width:100% !important;
+        height:auto !important;
+        display:block;
+      }
+      #sidebar.sidebar-sheet{
+        -webkit-overflow-scrolling: touch;
+      }
     }
   </style>
 </head>
