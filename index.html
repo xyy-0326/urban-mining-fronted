@@ -13,6 +13,7 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <style>
     :root{
@@ -348,6 +349,7 @@
         );
       }
     }
+
   </style>
 </head>
 
@@ -449,6 +451,11 @@
     </div>
 
     <div id="material-chart-container" style="display:none; position:relative; margin-top:10px;">
+      <button id="btnExportMaterialPDF"
+              style="position:absolute; top:2px; right:22px; border:1px solid #ccc; background:#fff; border-radius:6px; padding:2px 8px; cursor:pointer; font-size:12px;">
+        PDF
+      </button>
+
       <button id="materialChartClose"
               style="position:absolute; top:2px; right:0; border:none; background:none; cursor:pointer;">×</button>
 
@@ -524,6 +531,7 @@
   const norm = (v) => (v || "").toString().trim().toLowerCase();
   const compact = (s) => (s || "").toString().toLowerCase().replace(/[^a-z0-9]+/g, "");
   const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
+  Chart.register(ChartDataLabels);
 
   const PALETTE_PURPLE = ["#4C2A85", "#6E3FA3", "#8C61B8", "#A783CC", "#C3A5DF", "#DDC8F0"];
   const PALETTE_GRAY   = ["#e6e6e6", "#d9d9d9", "#cccccc", "#bfbfbf", "#b3b3b3", "#a6a6a6"];
@@ -1230,12 +1238,104 @@
 
   dom.materialChartClose?.addEventListener("click", () => { dom.materialChartContainer.style.display = "none"; });
 
+  $("btnExportMaterialPDF")?.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    exportMaterialChartsPDF({ filename: "material-charts.pdf", scale: 2, orientation: "landscape" });
+  });
+  
+  
+
   // --- Charts ---
   function destroyCharts() {
     const c = state.charts;
     c.buildingBar && (c.buildingBar.destroy(), c.buildingBar = null);
     c.buildingPie && (c.buildingPie.destroy(), c.buildingPie = null);
     c.globalPie   && (c.globalPie.destroy(),   c.globalPie   = null);
+  }
+
+    // --- Export charts to PDF ---
+  function canvasToHiResDataURL(canvas, scale = 2) {
+    if (!canvas) return null;
+    const w = canvas.width, h = canvas.height;
+    if (!w || !h) return canvas.toDataURL("image/png");
+
+    const tmp = document.createElement("canvas");
+    tmp.width = Math.round(w * scale);
+    tmp.height = Math.round(h * scale);
+
+    const ctx = tmp.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(canvas, 0, 0, tmp.width, tmp.height);
+
+    return tmp.toDataURL("image/png");
+  }
+
+  function exportMaterialChartsPDF(opts = {}) {
+    const {
+      filename = "material-charts.pdf",
+      title = (dom.materialInfoLabel?.textContent || "Material charts").trim(),
+      scale = 2,
+      orientation = "landscape" // bar + 两个 pie 更适合横向
+    } = opts;
+
+    // 只有在图表显示时导出更合理
+    if (dom.materialChartContainer.style.display === "none") {
+      console.warn("Charts are not visible yet.");
+      return;
+    }
+
+    // 拿到三个 canvas
+    const barCanvas = $("materialBarBuilding");
+    const pieBuilding = $("materialChartBuilding");
+    const pieGlobal = $("materialChartGlobal");
+
+    if (!barCanvas || !pieBuilding || !pieGlobal) {
+      console.error("Missing chart canvas.");
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation, unit: "mm", format: "a4" });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 12;
+
+    // 标题
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    pdf.text(title || "Material charts", margin, margin + 4);
+
+    // 图片数据（高清）
+    const barImg = canvasToHiResDataURL(barCanvas, scale);
+    const pieBImg = canvasToHiResDataURL(pieBuilding, scale);
+    const pieGImg = canvasToHiResDataURL(pieGlobal, scale);
+
+    // 布局：上面 bar，下面两个 pie
+    const topY = margin + 10;
+    const usableW = pageW - margin * 2;
+
+    // bar 区域
+    const barH = 55; // mm（你可以根据效果微调 50~70）
+    pdf.addImage(barImg, "PNG", margin, topY, usableW, barH);
+
+    // 两个 pie 区域
+    const gap = 8;
+    const pieY = topY + barH + 10;
+    const pieW = (usableW - gap) / 2;
+    const pieH = Math.min(80, pageH - pieY - margin); // 保底不溢出
+
+    pdf.addImage(pieBImg, "PNG", margin, pieY, pieW, pieH);
+    pdf.addImage(pieGImg, "PNG", margin + pieW + gap, pieY, pieW, pieH);
+
+    // footer 时间
+    const now = new Date();
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.text(`Exported: ${now.toLocaleString()}`, margin, pageH - margin);
+
+    pdf.save(filename);
   }
 
   function ensureLegend(canvas, legendId, labels, colors) {
