@@ -1324,7 +1324,7 @@
     const gap = 8;
     const pieY = topY + barH + 10;
     const pieW = (usableW - gap) / 2;
-    const pieH = Math.min(80, pageH - pieY - margin); // 保底不溢出
+    const pieSize = Math.min(pieW, pageH - pieY - margin);
 
     pdf.addImage(pieBImg, "PNG", margin, pieY, pieW, pieH);
     pdf.addImage(pieGImg, "PNG", margin + pieW + gap, pieY, pieW, pieH);
